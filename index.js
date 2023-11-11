@@ -23,7 +23,7 @@ const camera = new THREE.PerspectiveCamera(
 
 scene.background = new THREE.Color("white");
 
-const renderer = new THREE.WebGLRenderer();
+const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(2);
 document.body.appendChild(renderer.domElement);
@@ -32,7 +32,8 @@ camera.position.set(0, 0, 10);
 
 const figures = genererFigures(hash, false, false);
 
-addToScene(scene, figures);
+const plottable = true;
+addToScene(scene, figures, camera, plottable);
 
 $hl.token.setTraits(figures.features);
 $hl.token.setName(figures.features.name);

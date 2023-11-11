@@ -1,20 +1,145 @@
 import * as THREE from "./lib/three.module.min.js";
+import * as BufferGeometryUtils from "./lib/BufferGeometryUtils.js";
 
-const meshManufacture = (figures, invert) => {
+//base materials
+const hatchMaterial = new THREE.MeshBasicMaterial({
+  color: "white",
+});
+
+const fullMaterial = new THREE.MeshBasicMaterial({
+  color: "black",
+  side: THREE.DoubleSide,
+});
+
+const lineMaterial = new THREE.LineBasicMaterial({
+  color: "black",
+});
+
+//plottable
+function calcFaceDirection(geometry, camera) {
+  const position = geometry.getAttribute("position");
+
+  const colors = [];
+  let cnt = 0;
+  let verts = [];
+
+  for (let i = 0; i < position.count; i++) {
+    let x = position.getX(i);
+    let y = position.getY(i);
+    let z = position.getZ(i);
+
+    verts.push([x, y, z]);
+
+    switch (cnt) {
+      case 0:
+      case 1:
+        cnt++;
+        break;
+      case 2:
+        const triangle = new THREE.Triangle();
+        triangle.a = new THREE.Vector3(...verts[0]);
+        triangle.b = new THREE.Vector3(...verts[1]);
+        triangle.c = new THREE.Vector3(...verts[2]);
+
+        const n = new THREE.Vector3();
+        const v = new THREE.Vector3();
+
+        triangle.getNormal(n);
+
+        triangle.getMidpoint(v);
+        v.subVectors(camera.position, v);
+
+        const sign = n.dot(v);
+
+        let color = new THREE.Color();
+
+        if (sign >= 0) {
+          color.setRGB(1, 0, 0);
+        } else {
+          color.setRGB(1, 1, 1);
+        }
+
+        colors.push(color.r, color.g, color.b);
+        colors.push(color.r, color.g, color.b);
+        colors.push(color.r, color.g, color.b);
+
+        cnt = 0;
+        verts = [];
+        break;
+    }
+  }
+
+  geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+}
+
+const mergeGeometries = (figures) => {
+  const geometries = [];
+
+  figures.forEach((d) => {
+    // check if merged group
+    if (d.userData.groupMerged) {
+      // if it's a group, it can be pushed to merge as such
+      geometries.push(d);
+    } else {
+      // if it's not a group
+      // check if it's a simple mesh
+      // or an instanced one
+
+      if (!d.isInstancedMesh) {
+        // if it's a simple mesh
+        d.updateMatrixWorld(true);
+
+        var cloned = d.geometry.clone();
+
+        cloned.applyMatrix4(d.matrixWorld);
+
+        for (const key in cloned.attributes) {
+          if (key !== "position" /* || key !== "rotation"*/) {
+            cloned.deleteAttribute(key);
+          }
+        }
+
+        // if (cloned.index) {
+        cloned = cloned.toNonIndexed();
+        cloned.index = null;
+        //}
+
+        geometries.push(cloned);
+      } else if (d.instanceMatrix) {
+        // if it's an instanced mesh
+
+        var count = monochrome
+          ? d.instanceMatrix.count
+          : Math.floor(d.instanceMatrix.count / 2);
+
+        for (let i = 0; i < count; i++) {
+          var cloned = d.geometry.clone();
+          var matrix = new THREE.Matrix4();
+          d.getMatrixAt(i, matrix);
+          cloned.applyMatrix4(matrix);
+
+          for (const key in cloned.attributes) {
+            if (key !== "position" /*|| key !== "rotation"*/) {
+              cloned.deleteAttribute(key);
+            }
+          }
+
+          cloned = cloned.toNonIndexed();
+
+          cloned.index = null;
+
+          geometries.push(cloned);
+        }
+      }
+    }
+  });
+
+  return BufferGeometryUtils.mergeGeometries(geometries, false);
+};
+
+// not plottable
+const meshManufacture = (figures) => {
   const meshes = [];
-
-  const hatchMaterial = new THREE.MeshBasicMaterial({
-    color: "white",
-  });
-
-  const fullMaterial = new THREE.MeshBasicMaterial({
-    color: "black",
-    side: THREE.DoubleSide,
-  });
-
-  const lineMaterial = new THREE.LineBasicMaterial({
-    color: "black",
-  });
 
   figures.forEach((fig) => {
     var geometry, edgeGeometry;
@@ -26,25 +151,16 @@ const meshManufacture = (figures, invert) => {
 
       geometry = new THREE.ExtrudeGeometry(shape, fig.geometry.extrudeSettings);
 
-      geometry.center();
+      //      geometry.center();
       edgeGeometry = new THREE.EdgesGeometry(geometry);
     } else {
-      if (fig.geometry.type === "BoxGeometry") {
-        // edge zfighting hack
-        let args = [
-          fig.geometry.args[0] - 0.01,
-          fig.geometry.args[1] - 0.01,
-          fig.geometry.args[2] - 0.01,
-        ];
+      // edge zfighting hack
 
-        geometry = new THREE[fig.geometry.type](...args);
-        geometry.center();
+      geometry = new THREE[fig.geometry.type](...fig.geometry.args);
+      geometry.center();
+      //geometry = calcFaceDirection(geometry, camera);
 
-        let normgeometry = new THREE[fig.geometry.type](...fig.geometry.args);
-        edgeGeometry = new THREE.EdgesGeometry(normgeometry);
-      } else {
-        edgeGeometry = new THREE.EdgesGeometry(geometry);
-      }
+      edgeGeometry = new THREE.EdgesGeometry(geometry);
     }
 
     var pos = new THREE.Vector3(fig.pos.x, fig.pos.y, fig.pos.z);
@@ -72,12 +188,7 @@ const meshManufacture = (figures, invert) => {
       hatch.rotation.set(rot.x, rot.y, rot.z);
       if (fig.scale) {
         hatch.scale.set(scale.x, scale.y, scale.z);
-      } else {
-        //hatch.scale.set(0.999, 0.990, 0.99);
       }
-      //hatch.castShadow = true;
-      //hatch.receiveShadow = true;
-
       meshes.push(hatch);
     }
 
@@ -95,10 +206,22 @@ const meshManufacture = (figures, invert) => {
   return meshes;
 };
 
-const addToScene = (scene, genfigs, invert) => {
-  const meshes = meshManufacture(genfigs.figures, invert);
+const addToScene = (scene, genfigs, camera, plottable) => {
+  const meshes = meshManufacture(genfigs.figures, camera);
 
-  meshes.forEach((d) => scene.add(d));
+  if (plottable) {
+    const mergedGeometry = mergeGeometries(meshes);
+
+    //calcFaceDirection(mergedGeometry, camera);
+
+    const content = new THREE.Mesh(mergedGeometry, hatchMaterial);
+
+    const line = new THREE.LineSegments(mergedGeometry, lineMaterial);
+
+    scene.add(content, line);
+  } else {
+    meshes.forEach((d) => scene.add(d));
+  }
 };
 
 export { addToScene };
