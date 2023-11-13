@@ -30,8 +30,6 @@ const genererFigures = (hash, anaverse) => {
 
   const r = () => sfc32(seed(), seed(), seed(), seed())();
 
-  console.log(hash);
-
   const rint = (n) => Math.floor(r() * n);
 
   const figures = [];
@@ -44,10 +42,6 @@ const genererFigures = (hash, anaverse) => {
   // below here is your script
   // this example is voluntarily extra-naive in its formulation
   // feel free to take vanilla JS shortcuts like spread syntax et al
-
-  for (let i = 0; i < 5; i++) {
-    console.log(r());
-  }
 
   // This function pushes a cube in the figure array
   // It takes a pos argument that is a {x,y,z} object.
@@ -80,16 +74,16 @@ const genererFigures = (hash, anaverse) => {
       full: false, // Fill with color texture (in the anaverse, red and cyan)
     });
 
-  for (let x = -5; x < 5; x++) {
-    for (let y = -5; y < 5; y++) {
-      for (let z = -5; z < 5; z++) {
-        // set up position
-        if (x + y < r() * 3) {
-          const pos = { x: x, y: y, z: z };
+  const size = 2;
 
-          // call the function
-          cube(pos);
-        }
+  for (let x = -size; x < size; x++) {
+    for (let y = -size; y < size; y++) {
+      for (let z = -size; z < size; z++) {
+        // set up position
+        const pos = { x: x, y: y, z: z };
+
+        // call the function
+        cube(pos);
       }
     }
   }

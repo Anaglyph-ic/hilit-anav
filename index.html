@@ -6,8 +6,16 @@
   <meta name="viewport"
     content="width=device-width, initial-scale=1, maximum-scale=1" />
   <script src="lib/hl-gen.js"></script>
-  <script type="module" src="lib/three.module.min.js"></script>
-  <script type="module" src="figures.js"></script>
+  <script src="lib/edgeProjector.js"></script>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./lib/three.module.min.js"
+      }
+    }
+  </script>
+
   <script type="module" src="index.js"></script>
   <style>
     html,

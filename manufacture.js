@@ -1,5 +1,4 @@
-import * as THREE from "./lib/three.module.min.js";
-import * as BufferGeometryUtils from "./lib/BufferGeometryUtils.js";
+import * as THREE from "three";
 
 //base materials
 const hatchMaterial = new THREE.MeshBasicMaterial({
@@ -15,130 +14,7 @@ const lineMaterial = new THREE.LineBasicMaterial({
   color: "black",
 });
 
-//plottable
-function calcFaceDirection(geometry, camera) {
-  const position = geometry.getAttribute("position");
-
-  const colors = [];
-  let cnt = 0;
-  let verts = [];
-
-  for (let i = 0; i < position.count; i++) {
-    let x = position.getX(i);
-    let y = position.getY(i);
-    let z = position.getZ(i);
-
-    verts.push([x, y, z]);
-
-    switch (cnt) {
-      case 0:
-      case 1:
-        cnt++;
-        break;
-      case 2:
-        const triangle = new THREE.Triangle();
-        triangle.a = new THREE.Vector3(...verts[0]);
-        triangle.b = new THREE.Vector3(...verts[1]);
-        triangle.c = new THREE.Vector3(...verts[2]);
-
-        const n = new THREE.Vector3();
-        const v = new THREE.Vector3();
-
-        triangle.getNormal(n);
-
-        triangle.getMidpoint(v);
-        v.subVectors(camera.position, v);
-
-        const sign = n.dot(v);
-
-        let color = new THREE.Color();
-
-        if (sign >= 0) {
-          color.setRGB(1, 0, 0);
-        } else {
-          color.setRGB(1, 1, 1);
-        }
-
-        colors.push(color.r, color.g, color.b);
-        colors.push(color.r, color.g, color.b);
-        colors.push(color.r, color.g, color.b);
-
-        cnt = 0;
-        verts = [];
-        break;
-    }
-  }
-
-  geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
-}
-
-const mergeGeometries = (figures) => {
-  const geometries = [];
-
-  figures.forEach((d) => {
-    // check if merged group
-    if (d.userData.groupMerged) {
-      // if it's a group, it can be pushed to merge as such
-      geometries.push(d);
-    } else {
-      // if it's not a group
-      // check if it's a simple mesh
-      // or an instanced one
-
-      if (!d.isInstancedMesh) {
-        // if it's a simple mesh
-        d.updateMatrixWorld(true);
-
-        var cloned = d.geometry.clone();
-
-        cloned.applyMatrix4(d.matrixWorld);
-
-        for (const key in cloned.attributes) {
-          if (key !== "position" /* || key !== "rotation"*/) {
-            cloned.deleteAttribute(key);
-          }
-        }
-
-        // if (cloned.index) {
-        cloned = cloned.toNonIndexed();
-        cloned.index = null;
-        //}
-
-        geometries.push(cloned);
-      } else if (d.instanceMatrix) {
-        // if it's an instanced mesh
-
-        var count = monochrome
-          ? d.instanceMatrix.count
-          : Math.floor(d.instanceMatrix.count / 2);
-
-        for (let i = 0; i < count; i++) {
-          var cloned = d.geometry.clone();
-          var matrix = new THREE.Matrix4();
-          d.getMatrixAt(i, matrix);
-          cloned.applyMatrix4(matrix);
-
-          for (const key in cloned.attributes) {
-            if (key !== "position" /*|| key !== "rotation"*/) {
-              cloned.deleteAttribute(key);
-            }
-          }
-
-          cloned = cloned.toNonIndexed();
-
-          cloned.index = null;
-
-          geometries.push(cloned);
-        }
-      }
-    }
-  });
-
-  return BufferGeometryUtils.mergeGeometries(geometries, false);
-};
-
-// not plottable
-const meshManufacture = (figures) => {
+const meshManufacture = (figures, mode) => {
   const meshes = [];
 
   figures.forEach((fig) => {
@@ -169,7 +45,7 @@ const meshManufacture = (figures) => {
     if (fig.scale) {
       scale = new THREE.Vector3(fig.scale.x, fig.scale.y, fig.scale.z);
     }
-    if (fig.lines) {
+    if (fig.lines && mode === "3D") {
       const line = new THREE.LineSegments(edgeGeometry, lineMaterial);
       line.position.set(pos.x, pos.y, pos.z);
       line.rotation.set(rot.x, rot.y, rot.z);
@@ -178,6 +54,8 @@ const meshManufacture = (figures) => {
       } else {
         line.scale.set(1, 1, 1);
       }
+
+      // hide lines
 
       meshes.push(line);
     }
@@ -206,19 +84,18 @@ const meshManufacture = (figures) => {
   return meshes;
 };
 
-const addToScene = (scene, genfigs, camera, plottable) => {
-  const meshes = meshManufacture(genfigs.figures, camera);
+const addToScene = (scene, genfigs, mode) => {
+  const meshes = meshManufacture(genfigs.figures, mode);
 
-  if (plottable) {
-    const mergedGeometry = mergeGeometries(meshes);
+  if (mode === "Plottable") {
+    const model = new THREE.Group();
 
-    //calcFaceDirection(mergedGeometry, camera);
+    // The scene is viewed from top. Rotate the model
+    // to get another perspective.
+    model.rotation.x = Math.PI / 2;
 
-    const content = new THREE.Mesh(mergedGeometry, hatchMaterial);
-
-    const line = new THREE.LineSegments(mergedGeometry, lineMaterial);
-
-    scene.add(content, line);
+    const proj = buildLineProjection(model, meshes);
+    scene.add(proj);
   } else {
     meshes.forEach((d) => scene.add(d));
   }
